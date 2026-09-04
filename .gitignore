@@ -1,0 +1,7 @@
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Generated changelog output that should not be committed
+CHANGELOG_QC.md
+RELEASE_NOTES.md

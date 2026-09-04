@@ -1,0 +1,49 @@
+# Stage 1: something merged to dev -> tell QC what to test.
+#
+# Read-only by design: creates no tag, no commit, no release.
+name: QC Changelog
+
+on:
+  push:
+    branches: [dev]
+  workflow_dispatch:
+
+jobs:
+  changelog:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # git-cliff needs full history and all tags to know where the last
+          # release ended. The default shallow clone gives it one commit and
+          # no tags -- the most common way this breaks in CI.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Verify the build is sane
+        run: npm test
+
+      - name: Generate the QC changelog
+        run: ./scripts/changelog-qc.sh CHANGELOG_QC.md
+
+      - name: Publish for QC
+        run: |
+          # Replace with however QC actually consumes this -- a Slack post, a
+          # Jira comment, a release-notes field. The job summary is the
+          # zero-config option.
+          {
+            echo "## What to test on \`dev\`"
+            echo
+            cat CHANGELOG_QC.md
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: qc-changelog
+          path: CHANGELOG_QC.md

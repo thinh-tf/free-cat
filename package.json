@@ -1,0 +1,29 @@
+{
+  "name": "free-cat",
+  "version": "0.0.0",
+  "description": "A cat clone, and a playground for practicing git-cliff",
+  "type": "module",
+  "bin": {
+    "free-cat": "./dist/index.js"
+  },
+  "main": "./dist/index.js",
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/index.ts",
+    "test": "tsc --noEmit && tsx --test \"src/**/*.test.ts\"",
+    "changelog:qc": "./scripts/changelog-qc.sh",
+    "release": "./scripts/release.sh"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "git-cliff": "^2.13.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}

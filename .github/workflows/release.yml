@@ -1,0 +1,53 @@
+# Stage 2: dev merged to main -> cut the official release.
+#
+# Manual while you are practicing: run it from the Actions tab (or with
+# `gh workflow run release.yml`) after merging dev into main. Uncomment the
+# `push` trigger once you trust it.
+#
+# IMPORTANT: this only produces a good changelog if the dev -> main merge
+# preserved individual commits. A SQUASH merge collapses the whole release
+# into one commit, and the changelog collapses with it.
+name: Release
+
+on:
+  workflow_dispatch:
+  # push:
+  #   branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm test
+
+      - name: Cut the release
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          # The same script you run locally, so CI cannot drift from your
+          # own workflow.
+          ./scripts/release.sh
+          git push origin main --follow-tags
+
+      - name: Create the GitHub release
+        run: |
+          version="$(git describe --tags --abbrev=0)"
+          # --latest renders only the release we just tagged.
+          ./node_modules/.bin/git-cliff --latest --output RELEASE_NOTES.md
+          gh release create "$version" --title "$version" --notes-file RELEASE_NOTES.md
+        env:
+          GH_TOKEN: ${{ github.token }}
