@@ -1,0 +1,81 @@
+# Keeps one standing "release" pull request open from dev to main, with the
+# pending changelog as its body, refreshed on every push to dev.
+#
+# This is release-please's one genuinely good idea, kept on top of git-cliff:
+# QC reads the PR to know what to test, and merging it *is* the release.
+name: Release PR
+
+on:
+  push:
+    branches: [dev]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: release-pr
+  cancel-in-progress: true
+
+jobs:
+  release-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build the pending changelog
+        id: pending
+        run: |
+          # Nothing to promote? Then there is no release PR to keep open.
+          if [ "$(git rev-list --count origin/main..origin/dev)" -eq 0 ]; then
+            echo "dev is not ahead of main; nothing to promote."
+            echo "empty=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          version="$(./node_modules/.bin/git-cliff --bumped-version)"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+          ./node_modules/.bin/git-cliff --unreleased --tag "$version" \
+            --output PENDING.md
+
+          {
+            echo "Merging this PR releases **$version**."
+            echo
+            echo "> [!IMPORTANT]"
+            echo "> Merge this with a **merge commit**, not a squash. Squashing"
+            echo "> collapses the whole release into one commit and the"
+            echo "> changelog collapses with it."
+            echo
+            cat PENDING.md
+            echo
+            echo "---"
+            echo "_Updated automatically by \`.github/workflows/release-pr.yml\`._"
+          } > BODY.md
+
+      - name: Create or update the release PR
+        if: steps.pending.outputs.empty != 'true'
+        run: |
+          title="chore(release): ${{ steps.pending.outputs.version }}"
+          existing="$(gh pr list --base main --head dev --state open \
+            --json number --jq '.[0].number // empty')"
+
+          if [ -n "$existing" ]; then
+            gh pr edit "$existing" --title "$title" --body-file BODY.md
+            echo "Updated release PR #$existing"
+          else
+            gh pr create --base main --head dev \
+              --title "$title" --body-file BODY.md
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}

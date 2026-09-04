@@ -149,14 +149,46 @@ git-cliff reads git history, so **how you merge determines what it can see**.
 
 ## CI
 
-Both workflows call the same scripts you run locally, so CI cannot drift from
-your own workflow.
+Four workflows. All of them call the same scripts you run locally, so CI
+cannot drift from your own workflow.
 
-- **`qc-changelog.yml`** — fires on every push to `dev`. Runs the tests, then
-  writes the changelog to the job summary and uploads it as an artifact.
-  Read-only; safe to leave on.
-- **`release.yml`** — `workflow_dispatch` only. Trigger it by hand after
-  merging `dev` into `main`. It pushes a commit, a tag, and a GitHub release,
-  so it stays manual until you trust it.
+| Workflow | Fires on | Does |
+|---|---|---|
+| `pr-title.yml` | any PR opened/edited | fails the check if the title is not a Conventional Commit |
+| `qc-changelog.yml` | push to `dev` | runs tests, writes the pending changelog to the job summary and an artifact |
+| `release-pr.yml` | push to `dev` | creates or updates one standing release PR from `dev` to `main` |
+| `release.yml` | push to `main` | tags, writes `CHANGELOG.md`, bumps the version, cuts the GitHub release |
 
-Both use `fetch-depth: 0` on checkout, for the reason noted in the workflow.
+The full loop, with two human decisions in it:
+
+```
+feature PR --squash--> dev --(merge the release PR)--> main --> released
+     ^                  ^                                        |
+     |                  |                                        v
+  title linted    release PR auto-updates                GitHub release
+                  with the pending changelog              + CHANGELOG.md
+```
+
+`release-pr.yml` is release-please's one genuinely good idea, kept on top of
+git-cliff: QC reads the standing PR to know what to test, and merging it *is*
+the release. Unlike release-please it holds no state, so nothing can get out
+of sync.
+
+**`pr-title.yml` exists because of a silent failure.** PRs are squash-merged
+into `dev`, so the PR title becomes the commit message, and
+`filter_unconventional = true` drops anything that does not parse -- with no
+error. A PR titled "Add colour output" merges happily and simply never appears
+in the changelog. The lint turns that into a failed check.
+
+**`release.sh` exits 0 when there is nothing to release.** `--bumped-version`
+returns the *current* tag rather than an empty string in that case, so the
+script compares against `git describe` instead of testing for emptiness.
+Without this, every ordinary push to `main` would turn CI red.
+
+Every checkout uses `fetch-depth: 0`. The default shallow clone gives
+git-cliff one commit and no tags -- the most common way this breaks in CI.
+
+## Turning the automation off
+
+Delete the `push:` trigger from `release.yml` to go back to releasing by hand
+with `npm run release`. Everything still works; you just decide when.

@@ -1,8 +1,4 @@
-# Stage 2: dev merged to main -> cut the official release.
-#
-# Manual while you are practicing: run it from the Actions tab (or with
-# `gh workflow run release.yml`) after merging dev into main. Uncomment the
-# `push` trigger once you trust it.
+# Stage 2: dev merged to main -> cut the official release, automatically.
 #
 # IMPORTANT: this only produces a good changelog if the dev -> main merge
 # preserved individual commits. A SQUASH merge collapses the whole release
@@ -10,12 +6,18 @@
 name: Release
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
-  # push:
-  #   branches: [main]
 
 permissions:
   contents: write
+
+# Never let two releases race: a second push while one is mid-release would
+# tag the same version twice.
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 jobs:
   release:
@@ -23,6 +25,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          # git-cliff needs full history and all tags to know where the last
+          # release ended. The default shallow clone gives it one commit and
+          # no tags -- the most common way this breaks in CI.
           fetch-depth: 0
 
       - uses: actions/setup-node@v4
@@ -35,19 +40,30 @@ jobs:
       - run: npm test
 
       - name: Cut the release
+        id: cut
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          # The same script you run locally, so CI cannot drift from your
-          # own workflow.
+
+          # The same script you run locally, so CI cannot drift from your own
+          # workflow. It exits 0 without tagging when nothing is releasable.
           ./scripts/release.sh
-          git push origin main --follow-tags
+
+          # Did it actually tag? If HEAD carries a tag, a release happened.
+          if version="$(git describe --exact-match --tags HEAD 2>/dev/null)"; then
+            echo "version=$version" >> "$GITHUB_OUTPUT"
+            git push origin main --follow-tags
+          else
+            echo "No release was cut; nothing further to do."
+          fi
 
       - name: Create the GitHub release
+        if: steps.cut.outputs.version != ''
         run: |
-          version="$(git describe --tags --abbrev=0)"
           # --latest renders only the release we just tagged.
           ./node_modules/.bin/git-cliff --latest --output RELEASE_NOTES.md
-          gh release create "$version" --title "$version" --notes-file RELEASE_NOTES.md
+          gh release create "${{ steps.cut.outputs.version }}" \
+            --title "${{ steps.cut.outputs.version }}" \
+            --notes-file RELEASE_NOTES.md
         env:
           GH_TOKEN: ${{ github.token }}

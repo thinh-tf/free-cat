@@ -1,0 +1,52 @@
+# Closes the one silent failure mode in this setup.
+#
+# PRs are squash-merged into dev, so the PR title becomes the commit message.
+# git-cliff's `filter_unconventional = true` drops commits that do not parse
+# as Conventional Commits -- with no error and no warning. A PR titled
+# "Add colour output" would merge happily and simply never appear in the
+# changelog. This makes that a failed check instead.
+name: PR Title
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check the title parses as a Conventional Commit
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          # The types git-cliff's default config recognises, plus build.
+          types='feat|fix|doc|docs|perf|refactor|style|test|chore|ci|build|revert'
+
+          # <type>[(scope)][!]: <description>
+          if printf '%s' "$TITLE" | grep -qE "^($types)(\([^)]+\))?!?: .+"; then
+            echo "OK: $TITLE"
+            exit 0
+          fi
+
+          cat >&2 <<MSG
+          PR title is not a Conventional Commit:
+
+            $TITLE
+
+          It must look like:
+
+            feat(cli): add a --color flag
+            fix: handle a missing file argument
+            refactor(io)!: drop the callback API
+
+          Allowed types: $(printf '%s' "$types" | tr '|' ' ')
+
+          This matters because this PR will be squash-merged, making the title
+          the commit message. git-cliff silently drops commits it cannot
+          parse, so a bad title here means the change never appears in the
+          changelog.
+          MSG
+          exit 1
