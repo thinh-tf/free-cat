@@ -47,11 +47,12 @@ npm version "${version#v}" --no-git-tag-version --allow-same-version >/dev/null
 # --unreleased : only commits since the last tag
 # --tag        : label them with the new version
 # --prepend    : insert at the top, preserving older entries
-#                (this is why the [changelog] footer in cliff.toml is empty)
 "$CLIFF" --unreleased --tag "$version" --prepend CHANGELOG.md
 
-git add CHANGELOG.md package.json
-git commit -m "chore(release): $version"
+# npm version bumps the lockfile too; both must land in the same commit
+# or `npm ci` sees package.json and package-lock.json out of sync.
+git add CHANGELOG.md package.json package-lock.json
+git commit -m "chore(release): prepare for $version"
 git tag -a "$version" -m "Release $version"
 
 cat <<MSG

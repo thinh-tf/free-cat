@@ -39,6 +39,8 @@ npm run dev -- --line-numbers src/cat.ts
 ```
 
 `git-cliff` is pinned as a devDependency, so `npm install` is all you need.
+`cliff.toml` is the stock `git cliff --init` output, kept deliberately
+unmodified as a baseline.
 `scripts/_cliff.sh` prefers that pinned copy and falls back to a `git-cliff`
 on `$PATH`, which keeps local runs and CI byte-identical.
 
@@ -65,26 +67,43 @@ npm run release
 git push origin main --follow-tags
 ```
 
-## Commit types this repo recognises
+## Commit types
 
-Configured in `cliff.toml` under `commit_parsers`:
+`cliff.toml` is git-cliff's **stock generated config** (`git cliff --init`),
+unmodified. These groups and rules are the tool's own defaults, not local
+choices:
 
-| Prefix | Changelog section | Version effect |
-|---|---|---|
-| `feat:` | Features | minor |
-| `fix:` | Bug Fixes | patch |
-| `perf:` | Performance | patch |
-| `refactor:` | Refactor | patch |
-| `docs:` | Documentation | patch |
-| `test:` | Testing | patch |
-| `ci:` / `build:` | Build & CI | patch |
-| `chore:` | Miscellaneous | patch |
-| `chore(deps):` | *skipped* | — |
-| `feat!:` / `BREAKING CHANGE:` | flagged inline | minor (see below) |
+| Prefix | Changelog section |
+|---|---|
+| `feat:` | 🚀 Features |
+| `fix:` | 🐛 Bug Fixes |
+| `refactor:` | 🚜 Refactor |
+| `doc:` / `docs:` | 📚 Documentation |
+| `perf:` | ⚡ Performance |
+| `style:` | 🎨 Styling |
+| `test:` | 🧪 Testing |
+| `chore:` / `ci:` | ⚙️ Miscellaneous Tasks |
+| `revert:` | ◀️ Revert |
+| anything else conventional | 💼 Other |
 
-`breaking_always_bump_major = false` in `cliff.toml`, so a breaking change
-bumps the minor version rather than going to `1.0.0`. That is usually what
-you want pre-1.0. Flip it to see the difference.
+A commit whose *body* matches `security` lands under 🛡️ Security regardless of
+its prefix.
+
+**Skipped entirely:** `chore(release): prepare for ...`, `chore(deps...)`,
+`chore(pr)`, `chore(pull)`.
+
+That first pattern is why `scripts/release.sh` phrases its commit as
+`chore(release): prepare for vX.Y.Z` -- say it any other way and the release
+commit appears in its own changelog.
+
+**Version bumping** uses the defaults, which are not what a pre-1.0 project
+usually wants: `feat:` bumps the minor, and a breaking change bumps to
+**1.0.0**. Add a `[bump]` section with `breaking_always_bump_major = false` to
+stay in `0.x`.
+
+**Also default:** `protect_breaking_commits = false`, so a breaking commit
+matching a skip rule *is* dropped. And the issue-link preprocessor ships
+commented out, so `(#1)` renders as plain text rather than a link.
 
 ## Things worth practicing
 
@@ -92,15 +111,19 @@ Edit `cliff.toml`, then re-run `npm run changelog:qc` to see the effect.
 
 - **Grouping.** Reorder the `<!-- N -->` prefixes in `commit_parsers`. Add a
   group for `style` or `revert`.
-- **Skipping.** Make `chore` skip entirely, then note that a breaking commit
-  still appears — that is `protect_breaking_commits = true`.
+- **Skipping.** Make `chore` skip entirely. Then set
+  `protect_breaking_commits = true` and watch a breaking `chore!` reappear.
 - **Debugging a missing entry.** Set `filter_unconventional = false` and see
   what had been silently discarded.
+- **Issue links.** Uncomment the `commit_preprocessors` entry and the matching
+  `postprocessors` entry, replacing `<REPO>` with this repo's URL. Squash
+  merges append `(#N)`, so this gets you PR links for free.
 - **Templating.** The `body` is [Tera](https://keats.github.io/tera/docs/).
   Add the short hash: `{{ commit.id | truncate(length=7, end="") }}`.
   Add the author: `{{ commit.author.name }}`.
-- **Version bumping.** Compare `git cliff --bumped-version` before and after
-  toggling `features_always_bump_minor`.
+- **Version bumping.** Add a `[bump]` section and compare
+  `git cliff --bumped-version` before and after toggling
+  `breaking_always_bump_major`.
 - **Inspecting the data.** `git cliff --context` dumps the JSON your template
   receives. Indispensable when a template does not render what you expect.
 
