@@ -88,6 +88,11 @@ tag_pattern = "v[0-9]*"
 sort_commits = "oldest"
 
 [bump]
+# The version to use for the very first release, when there are no tags yet.
+# Without this git-cliff proposes a bare "0.1.0", which fails the
+# `tag_pattern` above ("v[0-9]*") and blocks the first release entirely.
+initial_tag = "v0.1.0"
+
 # `feat:` bumps the minor version. Set false to keep pre-1.0 on patch bumps.
 features_always_bump_minor = true
 
