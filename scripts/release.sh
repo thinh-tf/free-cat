@@ -29,9 +29,14 @@ else
   version="$("$CLIFF" --bumped-version)"
 fi
 
-if [ -z "$version" ]; then
-  echo "No releasable commits since the last tag." >&2
-  exit 1
+# `--bumped-version` returns the CURRENT tag when nothing is releasable, not
+# an empty string, so compare against it rather than testing for emptiness.
+current="$(git describe --tags --abbrev=0 2>/dev/null || true)"
+if [ -z "$version" ] || { [ -n "$current" ] && [ "$version" = "$current" ]; }; then
+  echo "Nothing to release: no releasable commits since ${current:-the start of history}."
+  # Exit 0, not 1: this script runs on every push to main, and an ordinary
+  # push with no releasable commits is a success, not a failed build.
+  exit 0
 fi
 
 echo "Releasing $version"
